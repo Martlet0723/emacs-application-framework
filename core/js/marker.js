@@ -273,8 +273,14 @@ z-index: 2140000001;\
 
     Marker.gotoMarker = (key, callback)=>{
         selector = Marker.getMarkerSelector(key);
+        console.log("[EAF Marker] key:", key, "selector:", selector);
         if (selector != undefined && callback != undefined){
-            return callback(document.querySelector(selector));
+            const node = document.querySelector(selector);
+            console.log("[EAF Marker] found node:", node);
+            if (node) {
+                console.log("[EAF Marker] node tagName:", node.tagName, "className:", node.className, "id:", node.id);
+            }
+            return callback(node);
         } else {
             return "";
         }
@@ -298,12 +304,126 @@ z-index: 2140000001;\
         }
     };
 
+    // Helper function to dispatch click event that works with React, Radix UI and other frameworks
+    function dispatchClickEvent(node) {
+        console.log("[EAF Marker] dispatchClickEvent called for:", node);
+        const rect = node.getBoundingClientRect();
+        const clientX = rect.left + rect.width / 2;
+        const clientY = rect.top + rect.height / 2;
+        console.log("[EAF Marker] Click position:", clientX, clientY);
+        
+        // Focus the element first (important for some UI libraries)
+        if (node.focus) {
+            node.focus();
+            console.log("[EAF Marker] Focused element");
+        }
+        
+        // Dispatch full event sequence for maximum compatibility
+        // Many frameworks (React, Radix UI, etc.) use event delegation and synthetic events
+        
+        // 1. PointerEvent sequence (modern approach for Radix UI, etc.)
+        try {
+            const pointerDownEvent = new PointerEvent('pointerdown', {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+                clientX: clientX,
+                clientY: clientY,
+                isPrimary: true
+            });
+            node.dispatchEvent(pointerDownEvent);
+            console.log("[EAF Marker] Dispatched pointerdown");
+        } catch(e) { console.log("[EAF Marker] pointerdown error:", e); }
+        
+        // 2. MouseEvent sequence (for React synthetic events)
+        try {
+            const mouseDownEvent = new MouseEvent('mousedown', {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+                clientX: clientX,
+                clientY: clientY,
+                button: 0
+            });
+            node.dispatchEvent(mouseDownEvent);
+            console.log("[EAF Marker] Dispatched mousedown");
+        } catch(e) { console.log("[EAF Marker] mousedown error:", e); }
+        
+        try {
+            const mouseUpEvent = new MouseEvent('mouseup', {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+                clientX: clientX,
+                clientY: clientY,
+                button: 0
+            });
+            node.dispatchEvent(mouseUpEvent);
+            console.log("[EAF Marker] Dispatched mouseup");
+        } catch(e) { console.log("[EAF Marker] mouseup error:", e); }
+        
+        try {
+            const pointerUpEvent = new PointerEvent('pointerup', {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+                clientX: clientX,
+                clientY: clientY,
+                isPrimary: true
+            });
+            node.dispatchEvent(pointerUpEvent);
+            console.log("[EAF Marker] Dispatched pointerup");
+        } catch(e) { console.log("[EAF Marker] pointerup error:", e); }
+        
+        // 3. Final click event
+        try {
+            const clickEvent = new MouseEvent('click', {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+                clientX: clientX,
+                clientY: clientY,
+                button: 0
+            });
+            node.dispatchEvent(clickEvent);
+            console.log("[EAF Marker] Dispatched click");
+        } catch(e) { console.log("[EAF Marker] click error:", e); }
+        
+        // 4. Fallback: call click() method directly
+        try {
+            node.click();
+            console.log("[EAF Marker] Called node.click()");
+        } catch(e) { console.log("[EAF Marker] node.click() error:", e); }
+    }
+
+    // Helper function to find clickable ancestor for SVG inner elements
+    function findClickableAncestor(node) {
+        // SVG inner elements like <use>, <path>, <circle>, etc.
+        const svgInnerElements = ['use', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'text', 'tspan', 'g', 'svg'];
+        if (svgInnerElements.includes(node.nodeName.toLowerCase())) {
+            // Walk up to find a clickable parent
+            let parent = node.parentElement;
+            while (parent) {
+                if (isElementClickable(parent)) {
+                    return parent;
+                }
+                parent = parent.parentElement;
+            }
+        }
+        return node;
+    }
+
     // this is callback function which call by core.webengine.py get_mark_link
     Marker.getMarkerAction = (node) => {
         action = "";
         if(node == null){
             return action;
         }
+        
+        // For SVG inner elements, find the clickable ancestor
+        node = findClickableAncestor(node);
+        console.log("[EAF Marker] After findClickableAncestor:", node.tagName, node.className);
+        
         if(node.nodeName.toLowerCase() === 'select'){
             action = "eaf::[select]focus";
             node.focus();
@@ -312,24 +432,24 @@ z-index: 2140000001;\
             if((node.getAttribute('type') === 'submit') ||
                (node.getAttribute('type') === 'checkbox')){
                 action = "eaf::[" + node.nodeName + "&" + node.getAttribute('type') + "]click";
-                node.click();
+                dispatchClickEvent(node);
             } else {
                 action = "eaf::focus_click_movecursor_to_end";
                 node.focus();   // focus
                 node.click();   // show blink cursor
                 moveCursorToEnd(node); // move cursor to the end of line after focus.
             }
-        } else if(node.href != undefined && node.href != '' && node.getAttribute('href') != '' &&
-                  node.getAttribute('class') != 'toggle'){
+        } else if(node.href != undefined && node.href != '' && typeof node.href === 'string' && 
+                  node.getAttribute('href') != '' && node.getAttribute('class') != 'toggle'){
             if (node.href.includes('javascript:void') || node.getAttribute('href') == '#'){
                 action = "eaf::[href]click";
-                node.click();
+                dispatchClickEvent(node);
             } else {
                 return node.href;
             }
-        } else if(isElementClickable(node)){  // special href # button
+        } else if(isElementClickable(node)){  // special href # button or clickable element
             action = "eaf::click";
-            node.click();
+            dispatchClickEvent(node);
         } else if(node.nodeName.toLowerCase() === 'p'||
                   node.nodeName.toLowerCase() === 'span') {  // select text section
             action = "eaf::select_p_span";
