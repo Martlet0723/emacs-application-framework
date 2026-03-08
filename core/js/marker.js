@@ -47,9 +47,9 @@ try {
     }
 
     function isElementClickable(e) {
-        let clickSelectors = "a, button, select, input, textarea, summary, *[onclick], *[contenteditable=true], *.jfk-button, *.goog-flat-menu-button, *[role=button], *[role=link], *[role=menuitem], *[role=option], *[role=switch], *[role=tab], *[role=checkbox], *[role=combobox], *[role=menuitemcheckbox], *[role=menuitemradio], *.collapsed, *.expanded, *.dropdown, *.est_unselected, *.tab, *.mod-action-wrap, *.menu-item, [id^=couplet3_], *.eaf-file-manager-file-name, *.eaf-file-manager-preview-file-name, *.eaf-music-player-item, *.eaf-rss-reader-feed-item, *.eaf-rss-reader-article-item, *.item";
+        let clickSelectors = "a, button, select, input, textarea, summary, *[onclick], *[contenteditable=true], *.jfk-button, *.goog-flat-menu-button, *[role=button], *[role=link], *[role=menuitem], *[role=option], *[role=switch], *[role=tab], *[role=checkbox], *[role=combobox], *[role=menuitemcheckbox], *[role=menuitemradio], *.collapsed, *.expanded, *.dropdown, *.est_unselected, *.tab, *.mod-action-wrap, *.menu-item, [id^=couplet3_], *.eaf-file-manager-file-name, *.eaf-file-manager-preview-file-name, *.eaf-music-player-item, *.eaf-rss-reader-feed-item, *.eaf-rss-reader-article-item, *.item, *[tabindex]:not([tabindex='-1']), *[style*='cursor: pointer'], *[style*='cursor:pointer'], label, *[data-click], *[data-href], *.btn, *.button, *.clickable";
 
-        return e.matches(clickSelectors) || getComputedStyle(e).cursor.substr(0, 4) === "url(";
+        return e.matches(clickSelectors) || getComputedStyle(e).cursor === "pointer" || getComputedStyle(e).cursor.substr(0, 4) === "url(";
     }
 
     function isEditable(element) {

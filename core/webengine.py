@@ -1305,13 +1305,14 @@ class BrowserBuffer(Buffer):
     @interactive
     def caret_enable_mark(self):
         ''' Toggle mark in caret browsing.'''
+        # Auto-enable caret browsing if not already enabled
+        if not self.caret_browsing_mode:
+            self.caret_toggle_browsing()
         if self.caret_browsing_mode:
             self.caret_browsing_mark_activated = True
             if not self.buffer_widget.execute_js("CaretBrowsing.markEnabled"):
                 self.buffer_widget.eval_js("CaretBrowsing.toggleMark();")
                 message_to_emacs("Caret Mark set")
-        else:
-            message_to_emacs("Not in Caret Browsing mode!")
 
     @interactive
     def caret_toggle_mark(self):

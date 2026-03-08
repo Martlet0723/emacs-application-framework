@@ -1,4 +1,4 @@
-;;; eaf-mail.el --- Mail plugins
+;;; eaf-mail.el --- Mail plugins -*- lexical-binding: t; -*-
 
 ;; Filename: eaf-mail.el
 ;; Description: Mail plugins
