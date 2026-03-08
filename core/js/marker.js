@@ -318,93 +318,127 @@ z-index: 2140000001;\
             console.log("[EAF Marker] Focused element");
         }
         
+        // Common event options for maximum compatibility
+        const eventOpts = {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+            composed: true,  // Important for Shadow DOM and some frameworks
+            clientX: clientX,
+            clientY: clientY,
+            button: 0,
+            buttons: 1
+        };
+        
+        const pointerOpts = {
+            ...eventOpts,
+            pointerId: 1,
+            pointerType: 'mouse',
+            isPrimary: true,
+            width: 1,
+            height: 1,
+            pressure: 0.5,
+            tiltX: 0,
+            tiltY: 0
+        };
+        
         // Dispatch full event sequence for maximum compatibility
         // Many frameworks (React, Radix UI, etc.) use event delegation and synthetic events
         
-        // 1. PointerEvent sequence (modern approach for Radix UI, etc.)
+        // 1. Hover events (some frameworks need these)
         try {
-            const pointerDownEvent = new PointerEvent('pointerdown', {
-                view: window,
-                bubbles: true,
-                cancelable: true,
-                clientX: clientX,
-                clientY: clientY,
-                isPrimary: true
-            });
-            node.dispatchEvent(pointerDownEvent);
+            node.dispatchEvent(new PointerEvent('pointerover', { ...pointerOpts, buttons: 0 }));
+            node.dispatchEvent(new PointerEvent('pointerenter', { ...pointerOpts, buttons: 0, bubbles: false }));
+            node.dispatchEvent(new MouseEvent('mouseover', { ...eventOpts, buttons: 0 }));
+            node.dispatchEvent(new MouseEvent('mouseenter', { ...eventOpts, buttons: 0, bubbles: false }));
+        } catch(e) { console.log("[EAF Marker] hover events error:", e); }
+        
+        // 2. PointerEvent sequence (modern approach for Radix UI, etc.)
+        try {
+            node.dispatchEvent(new PointerEvent('pointerdown', pointerOpts));
             console.log("[EAF Marker] Dispatched pointerdown");
         } catch(e) { console.log("[EAF Marker] pointerdown error:", e); }
         
-        // 2. MouseEvent sequence (for React synthetic events)
+        // 3. MouseEvent sequence (for React synthetic events)
         try {
-            const mouseDownEvent = new MouseEvent('mousedown', {
-                view: window,
-                bubbles: true,
-                cancelable: true,
-                clientX: clientX,
-                clientY: clientY,
-                button: 0
-            });
-            node.dispatchEvent(mouseDownEvent);
+            node.dispatchEvent(new MouseEvent('mousedown', eventOpts));
             console.log("[EAF Marker] Dispatched mousedown");
         } catch(e) { console.log("[EAF Marker] mousedown error:", e); }
         
+        // Small delay to simulate real click timing (some frameworks need this)
+        
         try {
-            const mouseUpEvent = new MouseEvent('mouseup', {
-                view: window,
-                bubbles: true,
-                cancelable: true,
-                clientX: clientX,
-                clientY: clientY,
-                button: 0
-            });
-            node.dispatchEvent(mouseUpEvent);
+            node.dispatchEvent(new MouseEvent('mouseup', eventOpts));
             console.log("[EAF Marker] Dispatched mouseup");
         } catch(e) { console.log("[EAF Marker] mouseup error:", e); }
         
         try {
-            const pointerUpEvent = new PointerEvent('pointerup', {
-                view: window,
-                bubbles: true,
-                cancelable: true,
-                clientX: clientX,
-                clientY: clientY,
-                isPrimary: true
-            });
-            node.dispatchEvent(pointerUpEvent);
+            node.dispatchEvent(new PointerEvent('pointerup', { ...pointerOpts, pressure: 0 }));
             console.log("[EAF Marker] Dispatched pointerup");
         } catch(e) { console.log("[EAF Marker] pointerup error:", e); }
         
-        // 3. Final click event
+        // 4. Final click event
         try {
-            const clickEvent = new MouseEvent('click', {
-                view: window,
-                bubbles: true,
-                cancelable: true,
-                clientX: clientX,
-                clientY: clientY,
-                button: 0
-            });
-            node.dispatchEvent(clickEvent);
+            node.dispatchEvent(new MouseEvent('click', eventOpts));
             console.log("[EAF Marker] Dispatched click");
         } catch(e) { console.log("[EAF Marker] click error:", e); }
         
-        // 4. Fallback: call click() method directly
+        // 5. Fallback: call click() method directly (only works for HTML elements, not SVG)
         try {
-            node.click();
-            console.log("[EAF Marker] Called node.click()");
+            if (typeof node.click === 'function') {
+                node.click();
+                console.log("[EAF Marker] Called node.click()");
+            } else {
+                console.log("[EAF Marker] node.click() not available (SVG element), events already dispatched");
+            }
         } catch(e) { console.log("[EAF Marker] node.click() error:", e); }
+        
+        // 6. Keyboard event fallback (for frameworks that check isTrusted)
+        // Buttons and interactive elements should respond to Enter or Space
+        try {
+            const keydownEnter = new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+                composed: true
+            });
+            node.dispatchEvent(keydownEnter);
+            
+            const keyupEnter = new KeyboardEvent('keyup', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+                composed: true
+            });
+            node.dispatchEvent(keyupEnter);
+            console.log("[EAF Marker] Dispatched keyboard Enter events");
+        } catch(e) { console.log("[EAF Marker] keyboard error:", e); }
     }
 
     // Helper function to find clickable ancestor for SVG inner elements
     function findClickableAncestor(node) {
-        // SVG inner elements like <use>, <path>, <circle>, etc.
-        const svgInnerElements = ['use', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'text', 'tspan', 'g', 'svg'];
-        if (svgInnerElements.includes(node.nodeName.toLowerCase())) {
-            // Walk up to find a clickable parent
+        // SVG elements and their inner elements
+        const svgElements = ['use', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'text', 'tspan', 'g', 'svg'];
+        const nodeName = node.nodeName.toLowerCase();
+        
+        if (svgElements.includes(nodeName)) {
+            // For SVG elements, skip SVG itself and find the real clickable container
+            // (button, a, [role=button], etc.) because click handlers are usually on parent elements
             let parent = node.parentElement;
             while (parent) {
-                if (isElementClickable(parent)) {
+                const parentName = parent.nodeName.toLowerCase();
+                // Found a real interactive element, return it
+                if (['button', 'a', 'summary'].includes(parentName) ||
+                    parent.matches('[role="button"], [role="link"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="switch"], [role="option"]') ||
+                    parent.hasAttribute('onclick') ||
+                    parent.hasAttribute('data-click') ||
+                    parent.hasAttribute('data-href')) {
                     return parent;
                 }
                 parent = parent.parentElement;
@@ -436,7 +470,9 @@ z-index: 2140000001;\
             } else {
                 action = "eaf::focus_click_movecursor_to_end";
                 node.focus();   // focus
-                node.click();   // show blink cursor
+                if (typeof node.click === 'function') {
+                    node.click();   // show blink cursor
+                }
                 moveCursorToEnd(node); // move cursor to the end of line after focus.
             }
         } else if(node.href != undefined && node.href != '' && typeof node.href === 'string' && 
