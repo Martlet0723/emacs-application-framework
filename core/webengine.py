@@ -114,31 +114,103 @@ So this function add some script to avoid website throw error recursively.
 
 Note, we need hook this function to signal 'loadProgress', signal 'loadStarted' is not enough.'''
         if not self.url().toString().startswith("file:///"):
-            # Provide a full navigator.clipboard polyfill that bridges to Python via console message
+            # Provide a complete navigator.clipboard polyfill that bridges to Python via console message
             self.eval_js('''
-navigator.clipboard = {
-    _text: "",
-    writeText: function(text) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._text = text;
-                console.log("__EAF_CLIPBOARD_WRITE__:" + text);
-                resolve();
-            } catch (e) {
-                reject(e);
-            }
-        });
-    },
-    readText: function() {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(this._text);
-            } catch (e) {
-                reject(e);
+(function() {
+    var _clipboardText = "";
+
+    // ClipboardItem class for write() method
+    window.ClipboardItem = function(data) {
+        this.types = Object.keys(data);
+        this._data = data;
+    };
+    ClipboardItem.prototype.getType = function(type) {
+        return Promise.resolve(this._data[type]);
+    };
+
+    // Helper to extract text from Blob, Promise, or string
+    function extractText(data) {
+        return new Promise(function(resolve) {
+            if (data instanceof Blob) {
+                // Blob object - use text() method or FileReader
+                if (typeof data.text === "function") {
+                    data.text().then(resolve);
+                } else {
+                    var reader = new FileReader();
+                    reader.onload = function() { resolve(reader.result); };
+                    reader.readAsText(data);
+                }
+            } else if (typeof data.then === "function") {
+                // Promise - wait for it and recursively extract
+                data.then(function(v) { extractText(v).then(resolve); });
+            } else {
+                // String or other - convert to string
+                resolve(String(data));
             }
         });
     }
-};''')
+
+    // Create clipboard object with proper property descriptors
+    var clipboard = {
+        _text: "",
+        writeText: function(text) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    _clipboardText = text;
+                    console.log("__EAF_CLIPBOARD_WRITE__:" + text);
+                    resolve();
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        },
+        readText: function() {
+            return Promise.resolve(_clipboardText);
+        },
+        write: function(items) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    if (items && items.length > 0) {
+                        var item = items[0];
+                        if (item._data && item._data["text/plain"]) {
+                            extractText(item._data["text/plain"]).then(function(text) {
+                                _clipboardText = text;
+                                console.log("__EAF_CLIPBOARD_WRITE__:" + text);
+                            });
+                        }
+                    }
+                    resolve();
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        },
+        read: function() {
+            return Promise.resolve([new ClipboardItem({"text/plain": Promise.resolve(_clipboardText)})]);
+        }
+    };
+
+    // Use Object.defineProperty to make it look more native
+    Object.defineProperty(navigator, "clipboard", {
+        get: function() { return clipboard; },
+        configurable: true,
+        enumerable: true
+    });
+
+    // Hook document.execCommand to catch legacy copy operations
+    var _origExecCommand = document.execCommand;
+    document.execCommand = function(cmd, showUI, value) {
+        if (cmd === "copy" || cmd === "cut") {
+            var text = window.getSelection ? window.getSelection().toString() : "";
+            if (text) {
+                _clipboardText = text;
+                console.log("__EAF_CLIPBOARD_WRITE__:" + text);
+            }
+        }
+        return _origExecCommand.apply(this, arguments);
+    };
+})();
+''')
 
     def read_js_content(self, js_file):
         ''' Read content of JavaScript(js) files.'''
