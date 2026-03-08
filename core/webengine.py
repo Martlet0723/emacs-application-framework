@@ -114,7 +114,31 @@ So this function add some script to avoid website throw error recursively.
 
 Note, we need hook this function to signal 'loadProgress', signal 'loadStarted' is not enough.'''
         if not self.url().toString().startswith("file:///"):
-            self.eval_js("navigator.clipboard = {};")
+            # Provide a full navigator.clipboard polyfill that bridges to Python via console message
+            self.eval_js('''
+navigator.clipboard = {
+    _text: "",
+    writeText: function(text) {
+        return new Promise((resolve, reject) => {
+            try {
+                this._text = text;
+                console.log("__EAF_CLIPBOARD_WRITE__:" + text);
+                resolve();
+            } catch (e) {
+                reject(e);
+            }
+        });
+    },
+    readText: function() {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(this._text);
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
+};''')
 
     def read_js_content(self, js_file):
         ''' Read content of JavaScript(js) files.'''
@@ -823,6 +847,11 @@ class BrowserPage(QWebEnginePage):
         self.loop.quit()
 
     def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+        # Handle clipboard write from JavaScript
+        if message.startswith("__EAF_CLIPBOARD_WRITE__:"):
+            text = message[len("__EAF_CLIPBOARD_WRITE__"):]
+            set_clipboard_text(text)
+            return
         # Only print JavaScript console message for EAF application.
         # don't print any console message from browser, print too much message will slow down Emacs.
         if self.url().toString() == "file:///":
